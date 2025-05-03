@@ -2,7 +2,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Charging Time Calculator v1.1</title>
+  <title>Charging Time Calculator v1.2</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#007bff">
   <style>
@@ -26,7 +26,7 @@
 </head>
 <body>
   <h2>Charging Time Calculator</h2>
-  <div id="version">Version: 1.1</div><button id="toggleTheme" class="control">Toggle Theme</button> <button id="settingsToggle" class="control">Charging Profile Settings</button>
+  <div id="version">Version: 1.2</div><button id="toggleTheme" class="control">Toggle Theme</button> <button id="settingsToggle" class="control">Charging Profile Settings</button>
 
   <div id="settings">
     <p>Define charging profile: minutes to reach each 10% step.</p>
@@ -39,104 +39,84 @@
   <div id="chartContainer"><canvas id="chargeChart" height="200"></canvas></div>
   <table id="dataTable"><thead><tr><th>Time</th><th>Charge %</th><th>Time Remaining</th></tr></thead><tbody></tbody></table><script>
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(console.error);
-
-  // Ensure profile has 0% = 0 minutes
-  let stored = JSON.parse(localStorage.getItem('chargeProfile'));
-  let profile = stored || {};
-  if (profile[0] === undefined) profile[0] = 0;
-  if (profile[100] === undefined) profile[100] = 414;
+  // Load or init profile (minutes)
+  let profile = JSON.parse(localStorage.getItem('chargeProfile')) || {0:0,100:414};
 
   function renderProfileInputs() {
-    const container = document.getElementById('profileInputs');
-    container.innerHTML = '';
-    for (let pct = 10; pct <= 100; pct += 10) {
-      const div = document.createElement('div');
-      const label = document.createElement('label'); label.textContent = `Minutes to reach ${pct}%:`;
-      const input = document.createElement('input');
-      input.type = 'number'; input.min = 0; input.className = 'control'; input.id = `prof${pct}`;
-      input.value = profile[pct] !== undefined ? profile[pct] : '';
-      div.append(label, input);
-      container.appendChild(div);
+    const c = document.getElementById('profileInputs'); c.innerHTML='';
+    for(let pct=10;pct<=100;pct+=10){
+      const d=document.createElement('div');
+      const l=document.createElement('label'); l.textContent=`Minutes to reach ${pct}%:`;
+      const i=document.createElement('input'); i.type='number'; i.min=0; i.className='control'; i.id=`prof${pct}`;
+      i.value = profile[pct]!==undefined?profile[pct]:'';
+      d.append(l,i); c.append(d);
     }
   }
   renderProfileInputs();
-
-  document.getElementById('settingsToggle').onclick = () => {
-    const s = document.getElementById('settings');
-    s.style.display = s.style.display === 'block' ? 'none' : 'block';
+  document.getElementById('settingsToggle').onclick=()=>{
+    const s=document.getElementById('settings'); s.style.display=s.style.display==='block'?'none':'block';
+  };
+  document.getElementById('saveProfile').onclick=()=>{
+    const newP={0:0};
+    for(let pct=10;pct<=100;pct+=10){const v=parseFloat(document.getElementById(`prof${pct}`).value); if(!isNaN(v))newP[pct]=v;}
+    if(!newP[100]){alert('Set time for 100%');return;}
+    profile=newP; localStorage.setItem('chargeProfile',JSON.stringify(profile));
+    alert('Profile saved'); document.getElementById('settings').style.display='none'; updateCalculator();
   };
 
-  document.getElementById('saveProfile').onclick = () => {
-    const newProfile = {0:0};
-    for (let pct = 10; pct <= 100; pct += 10) {
-      const v = parseFloat(document.getElementById(`prof${pct}`).value);
-      if (!isNaN(v)) newProfile[pct] = v;
-    }
-    if (!newProfile[100]) { alert('Please set time for 100%'); return; }
-    profile = newProfile;
-    localStorage.setItem('chargeProfile', JSON.stringify(profile));
-    alert('Profile saved');
-    document.getElementById('settings').style.display = 'none';
-    updateCalculator();
-  };
-
-  const toggle = document.getElementById('toggleTheme');
-  function applyTheme(t) {
-    document.documentElement.setAttribute('data-theme', t);
-    localStorage.setItem('theme', t);
-    toggle.textContent = t === 'dark' ? 'Light Mode' : 'Dark Mode';
-    toggle.style.background = t === 'dark' ? 'var(--toggle-light)' : 'var(--toggle-dark)';
-    toggle.style.color = t === 'dark' ? 'var(--toggle-dark)' : 'var(--toggle-light)';
+  const toggle=document.getElementById('toggleTheme');
+  function applyTheme(t){document.documentElement.setAttribute('data-theme',t);
+    localStorage.setItem('theme',t);
+    toggle.textContent=t==='dark'?'Light Mode':'Dark Mode';
+    toggle.style.background=t==='dark'?'var(--toggle-light)':'var(--toggle-dark)';
+    toggle.style.color=t==='dark'?'var(--toggle-dark)':'var(--toggle-light)';
   }
-  toggle.onclick = () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
-  applyTheme(localStorage.getItem('theme') || 'light');
+  toggle.onclick=()=>applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
+  applyTheme(localStorage.getItem('theme')||'light');
 
-  function getNow() { const ov = document.getElementById('overrideTime').value; const n = new Date(); if (ov) { const [h,m]=ov.split(':').map(Number); n.setHours(h,m,0,0);} return n; }
-  function displayCurrentTime() { const n = getNow(); document.getElementById('currentTime').innerText = `Current time: ${n.toLocaleTimeString()}`; }
+  function getNow(){const ov=document.getElementById('overrideTime').value;const n=new Date();if(ov){const [h,m]=ov.split(':').map(Number);n.setHours(h,m,0,0);}return n;}
+  function displayCurrentTime(){const n=getNow();document.getElementById('currentTime').innerText=`Current time: ${n.toLocaleTimeString()}`;}
 
-  function interpolateTime(p) {
-    const keys = Object.keys(profile).map(Number).sort((a,b)=>a-b);
-    let lower = keys[0], upper = keys[keys.length-1];
-    for (let k of keys) {
-      if (k <= p) lower = k;
-      if (k >= p) { upper = k; break; }
-    }
-    const t1 = profile[lower], t2 = profile[upper];
-    if (lower === upper) return t1;
-    const frac = (p - lower) / (upper - lower);
-    return t1 + frac * (t2 - t1);
+  function interpolateTime(p){
+    const keys=Object.keys(profile).map(Number).sort((a,b)=>a-b);
+    let lower=keys[0], upper=keys[keys.length-1];
+    for(let k of keys){ if(k<=p) lower=k; if(k>=p){upper=k;break;}};
+    const t1=profile[lower],t2=profile[upper]; if(lower===upper) return t1;
+    const frac=(p-lower)/(upper-lower);
+    return t1+frac*(t2-t1);
   }
 
-  function formatRemaining(mins) { const h = Math.floor(mins/60), m = Math.round(mins%60); return h>0?`${h}h ${m}m`:`${m}m`; }
+  function formatRemaining(mins){const h=Math.floor(mins/60),m=Math.round(mins%60);return h>0?`${h}h ${m}m`:`${m}m`;}
 
   let chart;
-  function updateCalculator() {
-    const cp = parseFloat(document.getElementById('currentCharge').value);
-    if (isNaN(cp)||cp<0||cp>100) return;
-    localStorage.setItem('lastCharge', cp);
-    localStorage.setItem('overrideTime', document.getElementById('overrideTime').value);
-
-    const now = getNow();
-    const tCurr = interpolateTime(cp);
-    const pts = [{ time: now, percent: cp, rem: 0 }];
-    for (let pct = Math.ceil(cp/5)*5; pct <= 100; pct += 5) {
-      if (pct <= cp) continue;
+  function updateCalculator(){
+    const cp=parseFloat(document.getElementById('currentCharge').value);
+    if(isNaN(cp)||cp<0||cp>100) return;
+    localStorage.setItem('lastCharge',cp);
+    localStorage.setItem('overrideTime',document.getElementById('overrideTime').value);
+    const now=getNow();
+    // Use only defined profile points
+    const defined = Object.keys(profile).map(Number).sort((a,b)=>a-b).filter(p => p>=cp);
+    const pts = defined.map(pct => {
       const t = interpolateTime(pct);
-      const remMin = t - tCurr;
-      pts.push({ time: new Date(now.getTime()+remMin*60000), percent: pct, rem: remMin });
-    }
+      const rem = t - interpolateTime(cp);
+      const time = new Date(now.getTime()+rem*60000);
+      return { time, percent: pct, rem };
+    });
 
-    const labels = pts.map(p=>p.time.toLocaleTimeString());
-    const data = pts.map(p=>p.percent);
-    const ctx = document.getElementById('chargeChart').getContext('2d'); if(chart)chart.destroy();
-    chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,fill:false,borderWidth:2,pointBackgroundColor:labels.map((_,i)=>i===0?'var(--highlight)':'var(--primary)')}]},options:{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
+    // Chart
+    const labels=pts.map(p=>p.time.toLocaleTimeString());
+    const data=pts.map(p=>p.percent);
+    const ctx=document.getElementById('chargeChart').getContext('2d'); if(chart)chart.destroy();
+    chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,fill:false,borderWidth:2, tension:0.4, pointBackgroundColor:labels.map((_,i)=>i===0?'var(--highlight)':'var(--primary)')}],},options:{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
 
-    const tbody = document.querySelector('#dataTable tbody');tbody.innerHTML='';
+    // Table
+    const tbody=document.querySelector('#dataTable tbody');tbody.innerHTML='';
     pts.forEach(p=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${p.time.toLocaleTimeString()}</td><td>${p.percent}%</td><td>${formatRemaining(p.rem)}</td>`;tbody.appendChild(tr);});
   }
 
   window.addEventListener('DOMContentLoaded',()=>{
-    document.getElementById('currentCharge').value=localStorage.getItem('lastCharge')||50;
+    document.getElementById('currentCharge').value=localStorage.getItem('lastCharge')||0;
     document.getElementById('overrideTime').value=localStorage.getItem('overrideTime')||new Date().toTimeString().slice(0,5);
     displayCurrentTime();setInterval(displayCurrentTime,1000);
     document.getElementById('overrideTime').addEventListener('change',updateCalculator);
