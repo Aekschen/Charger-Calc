@@ -2,7 +2,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Charging Time Calculator v1.0</title>
+  <title>Charging Time Calculator v1.1</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#007bff">
   <style>
@@ -26,7 +26,7 @@
 </head>
 <body>
   <h2>Charging Time Calculator</h2>
-  <div id="version">Version: 1.0</div><button id="toggleTheme" class="control">Toggle Theme</button> <button id="settingsToggle" class="control">Charging Profile Settings</button>
+  <div id="version">Version: 1.1</div><button id="toggleTheme" class="control">Toggle Theme</button> <button id="settingsToggle" class="control">Charging Profile Settings</button>
 
   <div id="settings">
     <p>Define charging profile: minutes to reach each 10% step.</p>
@@ -37,26 +37,21 @@
   <input type="time" id="overrideTime" class="control" /><label for="currentCharge">Battery Level (%)</label> <input type="number" id="currentCharge" min="0" max="100" class="control" /> <button onclick="updateCalculator()" class="control">Update</button>
 
   <div id="chartContainer"><canvas id="chargeChart" height="200"></canvas></div>
-  <table id="dataTable">
-    <thead>
-      <tr><th>Time</th><th>Charge %</th><th>Time Remaining</th></tr>
-    </thead>
-    <tbody></tbody>
-  </table><script>
-  // Register service worker
+  <table id="dataTable"><thead><tr><th>Time</th><th>Charge %</th><th>Time Remaining</th></tr></thead><tbody></tbody></table><script>
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(console.error);
 
-  // Profile in minutes (user-defined at 10% increments)
-  let profile = JSON.parse(localStorage.getItem('chargeProfile')) || {100: 414};
+  // Ensure profile has 0% = 0 minutes
+  let stored = JSON.parse(localStorage.getItem('chargeProfile'));
+  let profile = stored || {};
+  if (profile[0] === undefined) profile[0] = 0;
+  if (profile[100] === undefined) profile[100] = 414;
 
-  // Render profile input fields
   function renderProfileInputs() {
     const container = document.getElementById('profileInputs');
-    container.innerHTML = ''; 
+    container.innerHTML = '';
     for (let pct = 10; pct <= 100; pct += 10) {
       const div = document.createElement('div');
-      const label = document.createElement('label');
-      label.textContent = `Minutes to reach ${pct}%:`;
+      const label = document.createElement('label'); label.textContent = `Minutes to reach ${pct}%:`;
       const input = document.createElement('input');
       input.type = 'number'; input.min = 0; input.className = 'control'; input.id = `prof${pct}`;
       input.value = profile[pct] !== undefined ? profile[pct] : '';
@@ -66,15 +61,13 @@
   }
   renderProfileInputs();
 
-  // Toggle settings panel
   document.getElementById('settingsToggle').onclick = () => {
     const s = document.getElementById('settings');
     s.style.display = s.style.display === 'block' ? 'none' : 'block';
   };
 
-  // Save profile
   document.getElementById('saveProfile').onclick = () => {
-    const newProfile = {};
+    const newProfile = {0:0};
     for (let pct = 10; pct <= 100; pct += 10) {
       const v = parseFloat(document.getElementById(`prof${pct}`).value);
       if (!isNaN(v)) newProfile[pct] = v;
@@ -87,7 +80,6 @@
     updateCalculator();
   };
 
-  // Theme toggle
   const toggle = document.getElementById('toggleTheme');
   function applyTheme(t) {
     document.documentElement.setAttribute('data-theme', t);
@@ -99,22 +91,9 @@
   toggle.onclick = () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
   applyTheme(localStorage.getItem('theme') || 'light');
 
-  // Time functions
-  function getNow() {
-    const ov = document.getElementById('overrideTime').value;
-    const n = new Date();
-    if (ov) {
-      const [h,m] = ov.split(':').map(Number);
-      n.setHours(h,m,0,0);
-    }
-    return n;
-  }
-  function displayCurrentTime() {
-    const n = getNow();
-    document.getElementById('currentTime').innerText = `Current time: ${n.toLocaleTimeString()}`;
-  }
+  function getNow() { const ov = document.getElementById('overrideTime').value; const n = new Date(); if (ov) { const [h,m]=ov.split(':').map(Number); n.setHours(h,m,0,0);} return n; }
+  function displayCurrentTime() { const n = getNow(); document.getElementById('currentTime').innerText = `Current time: ${n.toLocaleTimeString()}`; }
 
-  // Linear interpolation based solely on user profile
   function interpolateTime(p) {
     const keys = Object.keys(profile).map(Number).sort((a,b)=>a-b);
     let lower = keys[0], upper = keys[keys.length-1];
@@ -128,15 +107,12 @@
     return t1 + frac * (t2 - t1);
   }
 
-  function formatRemaining(mins) {
-    const h = Math.floor(mins/60), m = Math.round(mins%60);
-    return h>0 ? `${h}h ${m}m` : `${m}m`;
-  }
+  function formatRemaining(mins) { const h = Math.floor(mins/60), m = Math.round(mins%60); return h>0?`${h}h ${m}m`:`${m}m`; }
 
   let chart;
   function updateCalculator() {
     const cp = parseFloat(document.getElementById('currentCharge').value);
-    if (isNaN(cp) || cp < 0 || cp > 100) return;
+    if (isNaN(cp)||cp<0||cp>100) return;
     localStorage.setItem('lastCharge', cp);
     localStorage.setItem('overrideTime', document.getElementById('overrideTime').value);
 
@@ -147,31 +123,23 @@
       if (pct <= cp) continue;
       const t = interpolateTime(pct);
       const remMin = t - tCurr;
-      pts.push({ time: new Date(now.getTime() + remMin*60000), percent: pct, rem: remMin });
+      pts.push({ time: new Date(now.getTime()+remMin*60000), percent: pct, rem: remMin });
     }
 
-    // Chart.js
     const labels = pts.map(p=>p.time.toLocaleTimeString());
     const data = pts.map(p=>p.percent);
-    const ctx = document.getElementById('chargeChart').getContext('2d');
-    if (chart) chart.destroy();
-    chart = new Chart(ctx, { type:'line', data:{ labels, datasets:[{ data, fill:false, borderWidth:2, pointBackgroundColor: labels.map((_,i)=>i===0?'var(--highlight)':'var(--primary)') }] }, options:{ scales:{ y:{ beginAtZero:true, max:100 }}, plugins:{ legend:{ display:false } } } });
+    const ctx = document.getElementById('chargeChart').getContext('2d'); if(chart)chart.destroy();
+    chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,fill:false,borderWidth:2,pointBackgroundColor:labels.map((_,i)=>i===0?'var(--highlight)':'var(--primary)')}]},options:{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
 
-    // Table
-    const tbody = document.querySelector('#dataTable tbody');
-    tbody.innerHTML = '';
-    pts.forEach(p=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${p.time.toLocaleTimeString()}</td><td>${p.percent}%</td><td>${formatRemaining(p.rem)}</td>`;
-      tbody.appendChild(tr);
-    });
+    const tbody = document.querySelector('#dataTable tbody');tbody.innerHTML='';
+    pts.forEach(p=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${p.time.toLocaleTimeString()}</td><td>${p.percent}%</td><td>${formatRemaining(p.rem)}</td>`;tbody.appendChild(tr);});
   }
 
-  window.addEventListener('DOMContentLoaded', ()=>{
-    document.getElementById('currentCharge').value = localStorage.getItem('lastCharge') || 50;
-    document.getElementById('overrideTime').value = localStorage.getItem('overrideTime') || new Date().toTimeString().slice(0,5);
-    displayCurrentTime(); setInterval(displayCurrentTime,1000);
-    document.getElementById('overrideTime').addEventListener('change', updateCalculator);
+  window.addEventListener('DOMContentLoaded',()=>{
+    document.getElementById('currentCharge').value=localStorage.getItem('lastCharge')||50;
+    document.getElementById('overrideTime').value=localStorage.getItem('overrideTime')||new Date().toTimeString().slice(0,5);
+    displayCurrentTime();setInterval(displayCurrentTime,1000);
+    document.getElementById('overrideTime').addEventListener('change',updateCalculator);
     updateCalculator();
   });
 </script></body>
