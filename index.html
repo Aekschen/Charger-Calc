@@ -1,24 +1,20 @@
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html><html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Bosch Akku Charging Calculator</title>
-
-  <!-- PWA manifest & theme color -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#007bff">
-
-  <style>
+  <title>Bosch Akku Charging Calculator</title>  <!-- PWA manifest & theme color -->  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#007bff">  <style>
     :root {
       --bg: #fff; --fg: #000;
       --table-bg: #f4f4f4; --table-border: #ccc;
       --primary: #007bff; --highlight: #ff4d4f;
+      --toggle-dark: #000; --toggle-light: #fff;
     }
     [data-theme="dark"] {
       --bg: #121212; --fg: #e0e0e0;
       --table-bg: #1e1e1e; --table-border: #333;
       --primary: #40a9ff; --highlight: #ff7875;
+      --toggle-dark: #000; --toggle-light: #fff;
     }
     body {
       background: var(--bg);
@@ -29,236 +25,130 @@
       margin: auto;
       transition: background 0.3s, color 0.3s;
     }
-    label {
-      font-weight: bold;
-      margin-top: 1rem;
-      margin-bottom: 0.25rem;
-      display: block;
-    }
-    /* Ensure inputs and button match exactly */
-    .control {
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      margin-bottom: 1rem;
-    }
-    input.control, button.control {
-      padding: 0.5rem;
-      font-size: 1rem;
-      color: var(--fg);
-      background: var(--bg);
-      border: 1px solid var(--table-border);
-      border-radius: 4px;
-    }
-    button.control {
-      cursor: pointer;
-      background: var(--primary);
-      color: #fff;
-      border: none;
-    }
-    #toggleTheme {
-      background: var(--highlight);
-    }
-    #currentTime {
-      text-align: center;
-      font-weight: bold;
-      margin-bottom: 1rem;
-    }
-    #chartContainer {
-      margin-top: 2rem;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1rem;
-      background: var(--table-bg);
-    }
-    th, td {
-      border: 1px solid var(--table-border);
-      padding: 0.5rem;
-      text-align: center;
-    }
-    th {
-      background: var(--table-bg);
-    }
-  </style>
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
+    label { font-weight: bold; margin-top: 1rem; margin-bottom: 0.25rem; display: block; }
+    .control { width: 100%; box-sizing: border-box; margin-bottom: 1rem; }
+    input.control, button.control { padding: 0.5rem; font-size: 1rem; color: var(--fg); background: var(--bg); border: 1px solid var(--table-border); border-radius: 4px; }
+    button.control { cursor: pointer; border: none; }
+    #toggleTheme { background: var(--toggle-dark); color: var(--toggle-light); }
+    #settingsToggle { background: var(--primary); color: #fff; }
+    #currentTime { text-align: center; font-weight: bold; margin-bottom: 1rem; }
+    #chartContainer { margin-top: 2rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; background: var(--table-bg); }
+    th, td { border: 1px solid var(--table-border); padding: 0.5rem; text-align: center; }
+    th { background: var(--table-bg); }
+    #settings { display: none; margin-top: 1rem; padding: 1rem; border: 1px solid var(--table-border); border-radius: 4px; }
+    #settings label { margin-top: 0; }
+  </style>  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script></head>
 <body>
   <h2>Charging Time Calculator</h2>
-
   <button id="toggleTheme" class="control">Toggle Theme</button>
-  <div id="currentTime"></div>
+  <button id="settingsToggle" class="control">Charging Profile Settings</button>
+  <div id="settings">
+    <p>Define charging profile: minutes to add each 10% step.</p>
+    <div id="profileInputs"></div>
+    <button id="saveProfile" class="control">Save Profile</button>
+  </div>  <div id="currentTime"></div><label for="overrideTime">Current Time (HH:MM)</label> <input type="time" id="overrideTime" class="control" />
 
-  <label for="overrideTime">Current Time (HH:MM)</label>
-  <input type="time" id="overrideTime" class="control" />
+<label for="currentCharge">Battery Level (%)</label> <input type="number" id="currentCharge" min="0" max="100" class="control" /> <button onclick="updateCalculator()" class="control">Update</button>
 
-  <label for="currentCharge">Battery Level (%)</label>
-  <input type="number" id="currentCharge" min="0" max="100" class="control" />
-
-  <button onclick="updateCalculator()" class="control">Update</button>
-
-  <div id="chartContainer">
-    <canvas id="chargeChart" height="200"></canvas>
-  </div>
-
-  <table id="dataTable">
+  <div id="chartContainer"><canvas id="chargeChart" height="200"></canvas></div>  <table id="dataTable">
     <thead>
-      <tr>
-        <th>Time (Berlin)</th>
-        <th>Charge %</th>
-        <th>Time Remaining</th>
-      </tr>
+      <tr><th>Time</th><th>Charge %</th><th>Time Remaining</th></tr>
     </thead>
     <tbody></tbody>
-  </table>
+  </table>  <script>
+    // Register SW
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(console.error);
 
-  <script>
-    // Register service worker for PWA
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('service-worker.js').catch(console.error);
+    // Default curve: cumulative hours at percent.
+    const defaultCurve = { 0:0, 100:6.9 };
+    // Load user profile or default
+    let profile = JSON.parse(localStorage.getItem('chargeProfile') || null) || defaultCurve;
+
+    function renderProfileInputs() {
+      const container = document.getElementById('profileInputs');
+      container.innerHTML = '';
+      for (let pct=10; pct<=100; pct+=10) {
+        const div = document.createElement('div');
+        const label = document.createElement('label'); label.textContent = `Time to reach ${pct}% (min)`;
+        const input = document.createElement('input');
+        input.type = 'number'; input.min=0; input.className='control';
+        input.id = `prof${pct}`;
+        input.value = profile[pct] !== undefined ? profile[pct] : '';
+        div.append(label, input);
+        container.appendChild(div);
+      }
     }
+    renderProfileInputs();
 
-    // Bosch 4A charging curve
-    const curve = [
-      { percent: 0, time: 0 },
-      { percent: 15, time: 0.5 },
-      { percent: 30, time: 1.0 },
-      { percent: 43, time: 1.5 },
-      { percent: 50, time: 2.3 },
-      { percent: 65, time: 3.5 },
-      { percent: 80, time: 4.5 },
-      { percent: 90, time: 5.5 },
-      { percent: 95, time: 6.2 },
-      { percent: 100, time: 6.9 }
-    ];
-
-    let chart;
-
-    // Theme toggle & persistence
-    const toggle = document.getElementById('toggleTheme');
-    function applyTheme(theme) {
-      document.documentElement.setAttribute('data-theme', theme);
-      localStorage.setItem('theme', theme);
-      toggle.textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
-    }
-    toggle.addEventListener('click', () => {
-      const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-      applyTheme(next);
+    document.getElementById('settingsToggle').addEventListener('click', ()=>{
+      const s=document.getElementById('settings');
+      s.style.display = s.style.display==='block'? 'none':'block';
     });
-    applyTheme(localStorage.getItem('theme') || 'light');
 
-    function getNow() {
-      const ov = document.getElementById('overrideTime').value;
-      const n = new Date();
-      if (ov) {
-        const [h, m] = ov.split(':').map(Number);
-        n.setHours(h, m, 0, 0);
+    document.getElementById('saveProfile').addEventListener('click', ()=>{
+      const newProf = {};
+      for (let pct=10; pct<=100; pct+=10) {
+        const val = parseFloat(document.getElementById(`prof${pct}`).value);
+        if (!isNaN(val)) newProf[pct] = val/60; // store hours
       }
-      return n;
-    }
-
-    function displayCurrentTime() {
-      const n = getNow();
-      document.getElementById('currentTime').innerText =
-        `Current time (Berlin): ${n.toLocaleString('de-DE', {
-          timeZone: 'Europe/Berlin',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit'
-        })}`;
-    }
-
-    function interpolateTime(p) {
-      for (let i = 0; i < curve.length - 1; i++) {
-        const p1 = curve[i], p2 = curve[i + 1];
-        if (p >= p1.percent && p <= p2.percent) {
-          return p1.time + ((p - p1.percent) / (p2.percent - p1.percent)) * (p2.time - p1.time);
-        }
+      if (!newProf[100]) {
+        alert('You must set time for 100%'); return;
       }
-      return curve[curve.length - 1].time;
-    }
-
-    function formatRemaining(mins) {
-      const h = Math.floor(mins / 60), m = mins % 60;
-      return h > 0 ? `${h}h ${m}m` : `${m}m`;
-    }
-
-    function updateCalculator() {
-      const cp = parseFloat(document.getElementById('currentCharge').value);
-      if (isNaN(cp) || cp < 0 || cp > 100) return;
-
-      // Save session
-      localStorage.setItem('lastCharge', cp);
-      localStorage.setItem('overrideTime', document.getElementById('overrideTime').value);
-
-      const now = getNow();
-      const tCurr = interpolateTime(cp);
-      const tFull = interpolateTime(100);
-
-      // Build points array
-      const pts = [{ time: now, percent: cp, rem: 0 }];
-      curve.filter(pt => pt.percent > cp).forEach(pt => {
-        const tT = interpolateTime(pt.percent);
-        const deltaH = tT - tCurr;
-        const remMin = Math.round((tT - tCurr) * 60);
-        pts.push({
-          time: new Date(now.getTime() + deltaH * 3600 * 1000),
-          percent: pt.percent,
-          rem: remMin
-        });
-      });
-
-      // Render Chart.js line chart
-      const labels = pts.map(p =>
-        p.time.toLocaleTimeString('de-DE', { timeZone:'Europe/Berlin', hour:'2-digit', minute:'2-digit' })
-      );
-      const data = pts.map(p => p.percent);
-      const ctx = document.getElementById('chargeChart').getContext('2d');
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            data,
-            fill: false,
-            borderWidth: 2,
-            pointBackgroundColor: labels.map((_, i) =>
-              i === 0 ? 'var(--highlight)' : 'var(--primary)'
-            )
-          }]
-        },
-        options: {
-          scales: { y: { beginAtZero: true, max: 100 }},
-          plugins: { legend: { display: false }}
-        }
-      });
-
-      // Populate table
-      const tb = document.querySelector('#dataTable tbody');
-      tb.innerHTML = '';
-      pts.forEach(p => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${p.time.toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})}</td>
-          <td>${p.percent}%</td>
-          <td>${formatRemaining(p.rem)}</td>`;
-        tb.appendChild(tr);
-      });
-    }
-
-    // Init on load
-    window.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('currentCharge').value = localStorage.getItem('lastCharge') || 50;
-      document.getElementById('overrideTime').value = localStorage.getItem('overrideTime')
-        || new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
-      displayCurrentTime();
-      setInterval(displayCurrentTime, 1000);
-      document.getElementById('overrideTime').addEventListener('change', updateCalculator);
+      profile = newProf;
+      localStorage.setItem('chargeProfile', JSON.stringify(profile));
+      alert('Profile saved'); document.getElementById('settings').style.display='none';
       updateCalculator();
     });
-  </script>
-</body>
+
+    // Theme
+    const toggle = document.getElementById('toggleTheme');
+    function applyTheme(t){ document.documentElement.setAttribute('data-theme',t); localStorage.setItem('theme',t); toggle.style.background = t==='dark'? 'var(--toggle-light)':'var(--toggle-dark)'; toggle.style.color=t==='dark'? 'var(--toggle-dark)':'var(--toggle-light)'; toggle.textContent = t==='dark'?'Light Mode':'Dark Mode'; }
+    toggle.addEventListener('click',()=>applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'));
+    applyTheme(localStorage.getItem('theme')||'light');
+
+    // Time & interpolation
+    function getNow(){ const ov=document.getElementById('overrideTime').value; const n=new Date(); if(ov){const [h,m]=ov.split(':').map(Number);n.setHours(h,m,0,0);} return n; }
+    function displayCurrentTime(){ const n=getNow(); document.getElementById('currentTime').innerText = `Current time: ${n.toLocaleTimeString()}`; }
+    function interpolateTime(p){
+      // find nearest defined points
+      const keys = Object.keys(profile).map(Number).sort((a,b)=>a-b);
+      if (p<=keys[0]) return profile[keys[0]]*(p/keys[0]);
+      for (let i=0;i<keys.length-1;i++){
+        const k1=keys[i],k2=keys[i+1];
+        if(p>=k1 && p<=k2){
+          const t1=profile[k1],t2=profile[k2];
+          return t1 + (p-k1)/(k2-k1)*(t2-t1);
+        }
+      }
+      const maxK=keys[keys.length-1]; return profile[maxK];
+    }
+    function formatRemaining(min){ const h=Math.floor(min/60),m=Math.round(min%60); return h>0?`${h}h ${m}m`:`${m}m`; }
+
+    let chart;
+    function updateCalculator(){
+      const cp=parseFloat(document.getElementById('currentCharge').value);
+      if(isNaN(cp)||cp<0||cp>100) return;
+      localStorage.setItem('lastCharge',cp);
+      localStorage.setItem('overrideTime',document.getElementById('overrideTime').value);
+      const now=getNow(),tCurr=interpolateTime(cp),tFull=interpolateTime(100);
+      const pts=[{time:now,percent:cp,rem:0}];
+      for(let pct=10;pct<=100;pct+=10) if(pct>cp&&profile[pct]!==undefined){
+        const tTar=interpolateTime(pct),delta=(tTar-tCurr)*3600*1000;
+        pts.push({time:new Date(now.getTime()+delta),percent:pct,rem:(tTar-tCurr)*60}); }
+      // Chart
+      const labels=pts.map(p=>p.time.toLocaleTimeString()), data=pts.map(p=>p.percent);
+      const ctx=document.getElementById('chargeChart').getContext('2d'); if(chart)chart.destroy();
+      chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,fill:false,borderWidth:2,pointBackgroundColor:labels.map((_,i)=>i===0?'var(--highlight)':'var(--primary)')}]},"options":{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
+      // Table
+      const tb=document.querySelector('#dataTable tbody'); tb.innerHTML=''; pts.forEach(p=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${p.time.toLocaleTimeString()}</td><td>${p.percent}%</td><td>${formatRemaining(p.rem)}</td>`;tb.appendChild(tr);});
+    }
+    window.addEventListener('DOMContentLoaded',()=>{
+      document.getElementById('currentCharge').value=localStorage.getItem('lastCharge')||50;
+      document.getElementById('overrideTime').value=localStorage.getItem('overrideTime')||new Date().toTimeString().substring(0,5);
+      displayCurrentTime(); setInterval(displayCurrentTime,1000);
+      document.getElementById('overrideTime').addEventListener('change',updateCalculator);
+      updateCalculator();
+    });
+  </script></body>
 </html>
