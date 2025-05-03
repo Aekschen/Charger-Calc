@@ -6,8 +6,8 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#007bff">
   <style>
-    :root { --bg:#fff;--fg:#000;--table-bg:#f4f4f4;--table-border:#ccc;--primary:#007bff;--highlight:#ff4d4f;--toggle-dark:#000;--toggle-light:#fff; }
-    [data-theme="dark"]{--bg:#121212;--fg:#e0e0e0;--table-bg:#1e1e1e;--table-border:#333;--primary:#40a9ff;--highlight:#ff7875;}
+    :root { --bg:#fff;--fg:#000;--table-bg:#f4f4f4;--table-border:#ccc;--primary:#007bff;--highlight:#ff4d4f;--toggle-dark:#000;--toggle-light:#fff }
+    [data-theme="dark"]{--bg:#121212;--fg:#e0e0e0;--table-bg:#1e1e1e;--table-border:#333;--primary:#40a9ff;--highlight:#ff7875}
     body{background:var(--bg);color:var(--fg);font-family:sans-serif;padding:1rem;max-width:600px;margin:auto;transition:background .3s,color .3s}
     label{font-weight:bold;margin-top:1rem;margin-bottom:.25rem;display:block}
     .control{width:100%;box-sizing:border-box;margin-bottom:1rem}
@@ -29,7 +29,7 @@
   <button id="toggleTheme" class="control">Toggle Theme</button>
   <button id="settingsToggle" class="control">Charging Profile Settings</button>
   <div id="settings">
-    <p>Define charging profile: minutes to reach each 10% step.</p>
+    <p>Define charging profile: <br>minutes to reach each 10% step.</p>
     <div id="profileInputs"></div>
     <button id="saveProfile" class="control">Save Profile</button>
   </div>  <div id="currentTime"></div>
@@ -39,22 +39,87 @@
   <input type="number" id="currentCharge" min="0" max="100" class="control" />
   <button onclick="updateCalculator()" class="control">Update</button>  <div id="chartContainer"><canvas id="chargeChart" height="200"></canvas></div>
   <table id="dataTable"><thead><tr><th>Time</th><th>Charge %</th><th>Time Remaining</th></tr></thead><tbody></tbody></table><script>
-  if('serviceWorker' in navigator)navigator.serviceWorker.register('service-worker.js').catch(console.error);
-  // Load profile or default
-  let profile=JSON.parse(localStorage.getItem('chargeProfile'))||{100:6.9};
-  function renderProfileInputs(){const c=document.getElementById('profileInputs');c.innerHTML='';for(let pct=10;pct<=100;pct+=10){const d=document.createElement('div'),l=document.createElement('label'),i=document.createElement('input');l.textContent=`Minutes to reach ${pct}%`;i.type='number';i.min=0;i.className='control';i.id=`prof${pct}`;i.value=profile[pct]?profile[pct]*60:'';d.append(l,i);c.append(d);} }
-  renderProfileInputs();document.getElementById('settingsToggle').addEventListener('click',()=>{const s=document.getElementById('settings');s.style.display=s.style.display==='block'?'none':'block';});
-  document.getElementById('saveProfile').addEventListener('click',()=>{const newP={};for(let pct=10;pct<=100;pct+=10){const v=parseFloat(document.getElementById(`prof${pct}`).value);if(!isNaN(v))newP[pct]=v/60;}if(!newP[100]){alert('Please set time for 100%');return;}profile=newP;localStorage.setItem('chargeProfile',JSON.stringify(profile));alert('Saved');document.getElementById('settings').style.display='none';updateCalculator();});
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(console.error);
+  // Profile in minutes; default only 100%: 6.9h *60
+  let profile = JSON.parse(localStorage.getItem('chargeProfile')) || {100: Math.round(6.9*60)};
+  function renderProfileInputs(){
+    const c=document.getElementById('profileInputs'); c.innerHTML='';
+    for(let pct=10; pct<=100; pct+=10){
+      const d=document.createElement('div');
+      const l=document.createElement('label'); l.textContent=`Minutes to reach ${pct}%:`;
+      const i=document.createElement('input');
+      i.type='number'; i.min=0; i.className='control'; i.id=`prof${pct}`;
+      i.value = profile[pct]!==undefined ? profile[pct] : '';
+      d.append(l, i); c.append(d);
+    }
+  }
+  renderProfileInputs();
+  document.getElementById('settingsToggle').addEventListener('click',()=>{
+    const s=document.getElementById('settings'); s.style.display = s.style.display==='block'?'none':'block';
+  });
+  document.getElementById('saveProfile').addEventListener('click',()=>{
+    const newP={};
+    for(let pct=10; pct<=100; pct+=10){
+      const v=parseFloat(document.getElementById(`prof${pct}`).value);
+      if(!isNaN(v)) newP[pct]=v; // minutes
+    }
+    if(!newP[100]){ alert('Please set time for 100%'); return; }
+    profile=newP; localStorage.setItem('chargeProfile', JSON.stringify(profile));
+    alert('Profile saved'); document.getElementById('settings').style.display='none'; updateCalculator();
+  });
   // Theme
-  const toggle=document.getElementById('toggleTheme');function applyTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('theme',t);toggle.textContent=t==='dark'?'Light Mode':'Dark Mode';toggle.style.background=t==='dark'? 'var(--toggle-light)': 'var(--toggle-dark)';toggle.style.color=t==='dark'?'var(--toggle-dark)':'var(--toggle-light)';}
+  const toggle=document.getElementById('toggleTheme');
+  function applyTheme(t){
+    document.documentElement.setAttribute('data-theme',t);
+    localStorage.setItem('theme',t);
+    toggle.textContent = t==='dark'?'Light Mode':'Dark Mode';
+    toggle.style.background = t==='dark'? 'var(--toggle-light)': 'var(--toggle-dark)';
+    toggle.style.color = t==='dark'? 'var(--toggle-dark)': 'var(--toggle-light)';
+  }
   toggle.addEventListener('click',()=>applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'));
   applyTheme(localStorage.getItem('theme')||'light');
-  function getNow(){const ov=document.getElementById('overrideTime').value;const n=new Date();if(ov){const[hh,mm]=ov.split(':').map(Number);n.setHours(hh,mm,0,0);}return n;}
-  function displayCurrentTime(){const n=getNow();document.getElementById('currentTime').innerText=`Current time: ${n.toLocaleTimeString()}`;}
-  function interpolateTime(p){const keys=Object.keys(profile).map(Number).sort((a,b)=>a-b);if(p<=keys[0])return profile[keys[0]]*(p/keys[0]);for(let i=0;i<keys.length-1;i++){const k1=keys[i],k2=keys[i+1];if(p>=k1&&p<=k2){const t1=profile[k1],t2=profile[k2];return t1+((p-k1)/(k2-k1))*(t2-t1);} }return profile[keys[keys.length-1]];}
-  function formatRemaining(m){const h=Math.floor(m/60),mm=Math.round(m%60);return h>0?`${h}h ${mm}m`:`${mm}m`;}
+
+  function getNow(){ const ov=document.getElementById('overrideTime').value; const n=new Date();
+    if(ov){ const [hh,mm]=ov.split(':').map(Number); n.setHours(hh,mm,0,0);} return n; }
+  function displayCurrentTime(){ const n=getNow(); document.getElementById('currentTime').innerText = `Current time: ${n.toLocaleTimeString()}`; }
+  function interpolateTime(p){
+    const keys=Object.keys(profile).map(Number).sort((a,b)=>a-b);
+    if(p<=keys[0]) return profile[keys[0]]*(p/keys[0]);
+    for(let i=0;i<keys.length-1;i++){
+      const k1=keys[i], k2=keys[i+1];
+      if(p>=k1&&p<=k2){
+        const t1=profile[k1], t2=profile[k2];
+        return t1 + (p-k1)/(k2-k1)*(t2-t1);
+      }
+    }
+    return profile[keys[keys.length-1]];
+  }
+  function formatRemaining(m){ const h=Math.floor(m/60),mm=Math.round(m%60); return h>0?`${h}h ${mm}m`:`${mm}m`; }
+
   let chart;
-  function updateCalculator(){const cp=parseFloat(document.getElementById('currentCharge').value);if(isNaN(cp)||cp<0||cp>100)return;localStorage.setItem('lastCharge',cp);localStorage.setItem('overrideTime',document.getElementById('overrideTime').value);const now=getNow(),tCurr=interpolateTime(cp),tFull=interpolateTime(100);const pts=[{time:now,percent:cp,rem:0}];const start=Math.ceil(cp/5)*5;for(let pct=start;pct<=100;pct+=5){const t=interpolateTime(pct),deltaH=t-tCurr;pts.push({time:new Date(now.getTime()+deltaH*3600*1e3),percent:pct,rem:(t-tCurr)*60});}const labels=pts.map(p=>p.time.toLocaleTimeString()),data=pts.map(p=>p.percent);const ctx=document.getElementById('chargeChart').getContext('2d');if(chart)chart.destroy();chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,fill:false,borderWidth:2,pointBackgroundColor:labels.map((_,i)=>i===0?'var(--highlight)':'var(--primary)')}]},"options":{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});const tb=document.querySelector('#dataTable tbody');tb.innerHTML='';pts.forEach(p=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${p.time.toLocaleTimeString()}</td><td>${p.percent}%</td><td>${formatRemaining(p.rem)}</td>`;tb.appendChild(tr);});}
-  window.addEventListener('DOMContentLoaded',()=>{document.getElementById('currentCharge').value=localStorage.getItem('lastCharge')||50;document.getElementById('overrideTime').value=localStorage.getItem('overrideTime')||new Date().toTimeString().slice(0,5);displayCurrentTime();setInterval(displayCurrentTime,1000);document.getElementById('overrideTime').addEventListener('change',updateCalculator);updateCalculator();});
+  function updateCalculator(){
+    const cp=parseFloat(document.getElementById('currentCharge').value);
+    if(isNaN(cp)||cp<0||cp>100) return;
+    localStorage.setItem('lastCharge',cp);
+    localStorage.setItem('overrideTime',document.getElementById('overrideTime').value);
+    const now=getNow(), tCurr=interpolateTime(cp), tFull=interpolateTime(100);
+    const pts=[{time:now,percent:cp,rem:0}];
+    const start=Math.ceil(cp/5)*5;
+    for(let pct=start; pct<=100; pct+=5){
+      const t=interpolateTime(pct), deltaMin=t-tCurr;
+      pts.push({time:new Date(now.getTime()+deltaMin*60000), percent:pct, rem:deltaMin});
+    }
+    const labels=pts.map(p=>p.time.toLocaleTimeString()), data=pts.map(p=>p.percent);
+    const ctx=document.getElementById('chargeChart').getContext('2d'); if(chart) chart.destroy();
+    chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,fill:false,borderWidth:2,pointBackgroundColor:labels.map((_,i)=>i===0?'var(--highlight)':'var(--primary)')}]},"options":{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
+    const tb=document.querySelector('#dataTable tbody'); tb.innerHTML=''; pts.forEach(p=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${p.time.toLocaleTimeString()}</td><td>${p.percent}%</td><td>${formatRemaining(p.rem)}</td>`;tb.appendChild(tr);});
+  }
+  window.addEventListener('DOMContentLoaded',()=>{
+    document.getElementById('currentCharge').value=localStorage.getItem('lastCharge')||50;
+    document.getElementById('overrideTime').value=localStorage.getItem('overrideTime')||new Date().toTimeString().slice(0,5);
+    displayCurrentTime(); setInterval(displayCurrentTime,1000);
+    document.getElementById('overrideTime').addEventListener('change',updateCalculator);
+    updateCalculator();
+  });
 </script></body>
 </html>
