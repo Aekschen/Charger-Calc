@@ -23,7 +23,6 @@
     th { background:var(--table-bg); }
     #updateBtn { background:var(--primary); color:#fff; }
     #clearTime { background:#888; color:#fff; }
-    #chargeSlider { margin-top:0.5rem; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -45,82 +44,39 @@
   <div id="chartContainer"><canvas id="chargeChart" height="200"></canvas></div>
   <table id="dataTable"><thead><tr><th>Time</th><th>Charge %</th><th>Time Remaining</th></tr></thead><tbody></tbody></table><script>
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(console.error);
-
-  // Load or init profile (in minutes)
   let profile = JSON.parse(localStorage.getItem('chargeProfile')) || {0:0,100:414};
-
   function renderProfileInputs() {
     const c=document.getElementById('profileInputs'); c.innerHTML='';
     for(let pct=10;pct<=100;pct+=10){
-      const d=document.createElement('div');
-      const l=document.createElement('label'); l.textContent=`Minutes to reach ${pct}%:`;
+      const d=document.createElement('div'); const l=document.createElement('label'); l.textContent=`Minutes to reach ${pct}%:`;
       const i=document.createElement('input'); i.type='number'; i.min=0; i.className='control'; i.id=`prof${pct}`;
-      i.value = profile[pct]!==undefined?profile[pct]:'';
-      d.append(l,i); c.append(d);
+      i.value=profile[pct]!==undefined?profile[pct]:''; d.append(l,i); c.append(d);
     }
   }
   renderProfileInputs();
-  document.getElementById('settingsToggle').onclick=()=>{
-    const s=document.getElementById('settings'); s.style.display=s.style.display==='block'?'none':'block';
-  };
+  document.getElementById('settingsToggle').onclick=()=>{const s=document.getElementById('settings');s.style.display=s.style.display==='block'?'none':'block';};
   document.getElementById('saveProfile').onclick=()=>{
-    const newP={0:0};
-    for(let pct=10;pct<=100;pct+=10){ const v=parseFloat(document.getElementById(`prof${pct}`).value); if(!isNaN(v)) newP[pct]=v; }
-    if(!newP[100]){alert('Please set time for 100%');return;} profile=newP;
-    localStorage.setItem('chargeProfile',JSON.stringify(profile)); alert('Profile saved');
-    document.getElementById('settings').style.display='none'; updateCalculator();
+    const newP={0:0};for(let pct=10;pct<=100;pct+=10){const v=parseFloat(document.getElementById(`prof${pct}`).value);if(!isNaN(v))newP[pct]=v;}
+    if(!newP[100]){alert('Please set time for 100%');return;}profile=newP;localStorage.setItem('chargeProfile',JSON.stringify(profile));alert('Profile saved');document.getElementById('settings').style.display='none';updateCalculator();
   };
-
-  const toggle=document.getElementById('toggleTheme');
-  function applyTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('theme',t);
-    toggle.textContent=t==='dark'?'Light Mode':'Dark Mode';
-    toggle.style.background=t==='dark'?'var(--toggle-light)':'var(--toggle-dark)';
-    toggle.style.color=t==='dark'?'var(--toggle-dark)':'var(--toggle-light)';
-  }
-  toggle.onclick=()=>applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
-  applyTheme(localStorage.getItem('theme')||'light');
-
-  function getNow(){ const ov=document.getElementById('overrideTime').value; const n=new Date(); if(ov){const[h,m]=ov.split(':').map(Number);n.setHours(h,m,0,0);} return n; }
-  function displayCurrentTime(){ const n=getNow(); document.getElementById('currentTime').innerText=`Current time: ${n.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`; }
-  document.getElementById('clearTime').onclick=()=>{document.getElementById('overrideTime').value=''; displayCurrentTime(); updateCalculator();};
-
-  const slider=document.getElementById('chargeSlider'), numInput=document.getElementById('currentCharge');
-  slider.oninput=()=>{numInput.value=slider.value;}; numInput.oninput=()=>{const v=parseInt(numInput.value)||0;slider.value=v;};
-
-  function interpolateTime(p){const keys=Object.keys(profile).map(Number).sort((a,b)=>a-b);
-    let lower=keys[0],upper=keys[keys.length-1];
-    for(let k of keys){ if(k<=p) lower=k; if(k>=p){upper=k;break;} }
-    const t1=profile[lower],t2=profile[upper]; if(lower===upper) return t1;
-    const frac=(p-lower)/(upper-lower); return t1+frac*(t2-t1);
-  }
+  const toggle=document.getElementById('toggleTheme');function applyTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('theme',t);toggle.textContent=t==='dark'?'Light Mode':'Dark Mode';toggle.style.background=t==='dark'?'var(--toggle-light)':'var(--toggle-dark)';toggle.style.color=t==='dark'?'var(--toggle-dark)':'var(--toggle-light)';}
+  toggle.onclick=()=>applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');applyTheme(localStorage.getItem('theme')||'light');
+  function getNow(){const ov=document.getElementById('overrideTime').value;const n=new Date();if(ov){const[h,m]=ov.split(':').map(Number);n.setHours(h,m,0,0);}return n;}
+  function displayCurrentTime(){const n=getNow();document.getElementById('currentTime').innerText=`Current time: ${n.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;}
+  document.getElementById('clearTime').onclick=()=>{document.getElementById('overrideTime').value='';displayCurrentTime();updateCalculator();};
+  const slider=document.getElementById('chargeSlider'),numInput=document.getElementById('currentCharge');slider.oninput=()=>{numInput.value=slider.value;};numInput.oninput=()=>{const v=parseInt(numInput.value)||0;slider.value=v;};
+  function interpolateTime(p){const keys=Object.keys(profile).map(Number).sort((a,b)=>a-b);let lower=keys[0],upper=keys[keys.length-1];for(let k of keys){if(k<=p)lower=k;if(k>=p){upper=k;break;}}const t1=profile[lower],t2=profile[upper];if(lower===upper)return t1;const frac=(p-lower)/(upper-lower);return t1+frac*(t2-t1);}  
   function formatRemaining(mins){const h=Math.floor(mins/60),m=Math.round(mins%60);return h>0?`${h}h ${m}m`:`${m}m`;}
-
   let chart;
-  function updateCalculator(){
-    const cp=parseFloat(numInput.value); if(isNaN(cp)||cp<0||cp>100) return;
-    localStorage.setItem('lastCharge',cp); localStorage.setItem('overrideTime',document.getElementById('overrideTime').value);
-    const now=getNow(), tCurr=interpolateTime(cp);
-    // Graph: all defined profile points >= cp
-    const graphKeys=Object.keys(profile).map(Number).filter(k=>k>=cp).sort((a,b)=>a-b);
+  function updateCalculator(){const cp=parseFloat(numInput.value);if(isNaN(cp)||cp<0||cp>100)return;localStorage.setItem('lastCharge',cp);localStorage.setItem('overrideTime',document.getElementById('overrideTime').value);const now=getNow(),tCurr=interpolateTime(cp);
+    // Graph: all defined keys
+    const graphKeys=Object.keys(profile).map(Number).sort((a,b)=>a-b);
     const graphPts=graphKeys.map(pct=>{const t=interpolateTime(pct),rem=t-tCurr;return{time:new Date(now.getTime()+rem*60000),percent:pct};});
     // Table: 5% increments
-    const tablePts=[]; for(let pct=Math.ceil(cp/5)*5;pct<=100;pct+=5){const t=interpolateTime(pct),rem=t-tCurr; tablePts.push({time:new Date(now.getTime()+rem*60000),percent:pct,rem}); }
-    // Chart
-    const labels=graphPts.map(p=>p.time.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
-    const data=graphPts.map(p=>p.percent);
-    const ctx=document.getElementById('chargeChart').getContext('2d'); if(chart)chart.destroy();
-    chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,fill:false,borderWidth:2,tension:0.4,pointBackgroundColor:labels.map((_,i)=>i===0?'var(--highlight)':'var(--primary)')}]},"options":{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
-    // Table
-    const tbody=document.querySelector('#dataTable tbody');tbody.innerHTML='';
-    tablePts.forEach(p=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${p.time.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td><td>${p.percent}%</td><td>${formatRemaining(p.rem)}</td>`;tbody.appendChild(tr);});
-  }
-
-  window.addEventListener('DOMContentLoaded',()=>{
-    numInput.value=localStorage.getItem('lastCharge')||0; slider.value=numInput.value;
-    document.getElementById('overrideTime').value=localStorage.getItem('overrideTime')||'';
-    displayCurrentTime(); setInterval(displayCurrentTime,1000);
-    document.getElementById('overrideTime').addEventListener('change',updateCalculator);
-    updateCalculator();
-  });
+    const tablePts=[];for(let pct=Math.ceil(cp/5)*5;pct<=100;pct+=5){const t=interpolateTime(pct),rem=t-tCurr;tablePts.push({time:new Date(now.getTime()+rem*60000),percent:pct,rem});}
+    const labels=graphPts.map(p=>p.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));const data=graphPts.map(p=>p.percent);
+    const ctx=document.getElementById('chargeChart').getContext('2d');if(chart)chart.destroy();chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,fill:false,borderWidth:2,tension:0.4,pointBackgroundColor:labels.map((_,i)=>i===0?'var(--highlight)':'var(--primary)')}]},"options":{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
+    const tbody=document.querySelector('#dataTable tbody');tbody.innerHTML='';tablePts.forEach(p=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${p.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</td><td>${p.percent}%</td><td>${formatRemaining(p.rem)}</td>`;tbody.appendChild(tr);});}
+  window.addEventListener('DOMContentLoaded',()=>{numInput.value=localStorage.getItem('lastCharge')||0;slider.value=numInput.value;document.getElementById('overrideTime').value=localStorage.getItem('overrideTime')||'';displayCurrentTime();setInterval(displayCurrentTime,1000);document.getElementById('overrideTime').addEventListener('change',updateCalculator);updateCalculator();});
 </script></body>
 </html>
