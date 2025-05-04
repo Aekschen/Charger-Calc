@@ -1,207 +1,133 @@
 <!DOCTYPE html><html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#000000" />
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.css">
-  <title>Charging Calculator</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Charging Time Calculator v1.3</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#007bff">
   <style>
-    body {
-      font-family: sans-serif;
-      margin: 1em;
-      transition: background 0.3s, color 0.3s;
-    }
-    .dark {
-      background: #111;
-      color: #eee;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 0.5em;
-      text-align: center;
-    }
-    input[type="number"], input[type="time"] {
-      padding: 0.5em;
-      width: 120px;
-      margin: 0.25em;
-    }
-    .label-inline {
-      display: flex;
-      align-items: center;
-      margin: 0.25em 0;
-    }
-    label {
-      margin-right: 0.5em;
-    }
-    #profile-settings {
-      display: none;
-      margin-top: 1em;
-    }
-    .btn {
-      padding: 0.5em 1em;
-      cursor: pointer;
-      border: none;
-      border-radius: 5px;
-      margin: 0.25em;
-    }
-    .btn-update { background: #007BFF; color: white; }
-    .btn-toggle { background: #ddd; }
-    .btn-dark { background: black; color: white; }
-    .btn-light { background: #f0f0f0; color: black; }
-    #version { font-size: 0.8em; margin-top: 1em; color: gray; }
+    :root { --bg:#fff; --fg:#000; --table-bg:#f4f4f4; --table-border:#ccc; --primary:#007bff; --highlight:#ff4d4f; --toggle-dark:#000; --toggle-light:#fff; }
+    [data-theme="dark"] { --bg:#121212; --fg:#e0e0e0; --table-bg:#1e1e1e; --table-border:#333; --primary:#40a9ff; --highlight:#ff7875; }
+    body { background:var(--bg); color:var(--fg); font-family:sans-serif; padding:1rem; max-width:600px; margin:auto; transition:0.3s; }
+    h2 { margin-bottom:0.2em; }
+    #version { font-size:0.9em; color:gray; margin-bottom:1em; }
+    label { font-weight:bold; margin-top:1rem; display:block; }
+    .control { width:100%; box-sizing:border-box; margin:0.5rem 0; padding:0.5rem; font-size:1rem; color:var(--fg); background:var(--bg); border:1px solid var(--table-border); border-radius:4px; }
+    button.control { cursor:pointer; border:none; }
+    #toggleTheme { background:var(--toggle-dark); color:var(--toggle-light); }
+    #settingsToggle { background:var(--primary); color:#fff; }
+    #settings { display:none; margin-top:1rem; padding:1rem; border:1px solid var(--table-border); border-radius:4px; }
+    #chartContainer { margin-top:2rem; }
+    table { width:100%; border-collapse:collapse; margin-top:1rem; background:var(--table-bg); }
+    th, td { border:1px solid var(--table-border); padding:0.5rem; text-align:center; }
+    th { background:var(--table-bg); }
+    #updateBtn { background:var(--primary); color:#fff; }
+    #clearTime { background:#888; color:#fff; }
+    #chargeSlider { margin-top:0.5rem; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-  <h2>Charging Calculator</h2>
-  <div class="label-inline">
-    <label for="startTime">Set Start Time:</label>
-    <input type="time" id="startTime">
-    <button onclick="clearStartTime()" class="btn">Clear</button>
-  </div>
-  <div class="label-inline">
-    <label for="batteryLevel">Battery Level:</label>
-    <input type="range" id="batteryLevelRange" min="0" max="95" step="5">
-    <input type="number" id="batteryLevel" min="0" max="95" step="5">
-  </div>
-  <button onclick="updateTable()" class="btn btn-update">Update</button>
-  <button onclick="toggleSettings()" class="btn btn-toggle">Adjust Profile</button>
-  <button onclick="toggleDarkMode()" class="btn btn-dark">Dark</button>
-  <button onclick="toggleLightMode()" class="btn btn-light">Light</button>  <div id="profile-settings">
-    <h3>Charging Time Profile (minutes)</h3>
-    <div id="profile-inputs"></div>
-  </div><canvas id="chargeChart"></canvas>
+  <h2>Charging Time Calculator</h2>
+  <div id="version">Version: 1.3</div><button id="toggleTheme" class="control">Toggle Theme</button> <button id="settingsToggle" class="control">Charging Profile Settings</button>
 
-  <table>
+  <div id="settings">
+    <p>Define charging profile: minutes to reach each 10% step.</p>
+    <div id="profileInputs"></div>
+    <button id="saveProfile" class="control">Save Profile</button>
+  </div>  <div id="currentTime"></div>
+  <label for="overrideTime">Set Start Time</label>
+  <input type="time" id="overrideTime" class="control" />
+  <button id="clearTime" class="control">Clear Time</button><label for="chargeSlider">Battery Level (%)</label> <input type="range" id="chargeSlider" min="0" max="100" step="5" class="control" /> <input type="number" id="currentCharge" min="0" max="100" class="control" />
+
+<button id="updateBtn" onclick="updateCalculator()" class="control">Update</button>
+
+  <div id="chartContainer"><canvas id="chargeChart" height="200"></canvas></div>
+  <table id="dataTable">
     <thead><tr><th>Time</th><th>Charge %</th><th>Time Remaining</th></tr></thead>
-    <tbody id="chargeTable"></tbody>
-  </table>
-  <div id="version">Version 1.3</div>  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>  <script>
-    const profileInputs = document.getElementById('profile-inputs');
-    const defaultProfile = { 0: 0, 50: 120, 100: 300 }; // in minutes
-    let profile = JSON.parse(localStorage.getItem('chargeProfile')) || defaultProfile;
+    <tbody></tbody>
+  </table><script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(console.error);
 
-    function createProfileInputs() {
-      profileInputs.innerHTML = '';
-      for (let i = 0; i <= 100; i += 10) {
-        const val = profile[i] ?? '';
-        profileInputs.innerHTML += `
-          <div class="label-inline">
-            <label>${i}%</label>
-            <input type="number" min="0" value="${val}" onchange="saveProfile(${i}, this.value)">
-          </div>
-        `;
-      }
+  // Load or init profile (in minutes)
+  let profile = JSON.parse(localStorage.getItem('chargeProfile')) || {0:0,100:414};
+
+  function renderProfileInputs() {
+    const c = document.getElementById('profileInputs'); c.innerHTML='';
+    for (let pct=10; pct<=100; pct+=10) {
+      const div=document.createElement('div');
+      const label=document.createElement('label'); label.textContent=`Minutes to reach ${pct}%:`;
+      const input=document.createElement('input'); input.type='number'; input.min=0; input.className='control'; input.id=`prof${pct}`;
+      input.value = profile[pct]!==undefined?profile[pct]:'';
+      div.append(label,input); c.append(div);
     }
+  }
+  renderProfileInputs();
+  document.getElementById('settingsToggle').onclick = ()=>{
+    const s=document.getElementById('settings'); s.style.display = s.style.display==='block'?'none':'block';
+  };
+  document.getElementById('saveProfile').onclick = ()=>{
+    const newP={0:0};
+    for(let pct=10;pct<=100;pct+=10){ const v=parseFloat(document.getElementById(`prof${pct}`).value); if(!isNaN(v)) newP[pct]=v; }
+    if(!newP[100]){alert('Please set time for 100%');return;} profile=newP;
+    localStorage.setItem('chargeProfile',JSON.stringify(profile));
+    alert('Profile saved'); document.getElementById('settings').style.display='none';
+    updateCalculator();
+  };
 
-    function saveProfile(step, val) {
-      if (val === '') delete profile[step];
-      else profile[step] = parseFloat(val);
-      localStorage.setItem('chargeProfile', JSON.stringify(profile));
-    }
+  // Theme
+  const toggle=document.getElementById('toggleTheme');
+  function applyTheme(t){ document.documentElement.setAttribute('data-theme',t); localStorage.setItem('theme',t);
+    toggle.textContent=t==='dark'?'Light Mode':'Dark Mode'; toggle.style.background=t==='dark'?'var(--toggle-light)':'var(--toggle-dark)';
+    toggle.style.color=t==='dark'?'var(--toggle-dark)':'var(--toggle-light)'; }
+  toggle.onclick = ()=> applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
+  applyTheme(localStorage.getItem('theme')||'light');
 
-    function toggleSettings() {
-      const div = document.getElementById('profile-settings');
-      div.style.display = div.style.display === 'none' ? 'block' : 'none';
-    }
+  // Time
+  function getNow(){ const ov=document.getElementById('overrideTime').value; const n=new Date(); if(ov){const[h,m]=ov.split(':').map(Number);n.setHours(h,m,0,0);} return n; }
+  function displayCurrentTime(){ const n=getNow(); document.getElementById('currentTime').innerText=`Current time: ${n.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`; }
+  document.getElementById('clearTime').onclick = ()=>{ document.getElementById('overrideTime').value=''; displayCurrentTime(); updateCalculator(); };
 
-    function toggleDarkMode() {
-      document.body.classList.add('dark');
-    }
+  // Battery slider sync
+  const slider=document.getElementById('chargeSlider'), numInput=document.getElementById('currentCharge');
+  slider.oninput = ()=>{ numInput.value=slider.value; };
+  numInput.oninput = ()=>{ const v=parseInt(numInput.value)||0; slider.value=v; };
 
-    function toggleLightMode() {
-      document.body.classList.remove('dark');
-    }
+  function interpolateTime(p){ const keys=Object.keys(profile).map(Number).sort((a,b)=>a-b);
+    let lower=keys[0], upper=keys[keys.length-1];
+    for(let k of keys){ if(k<=p) lower=k; if(k>=p){upper=k;break;} }
+    const t1=profile[lower], t2=profile[upper]; if(lower===upper) return t1;
+    const frac=(p-lower)/(upper-lower); return t1+frac*(t2-t1);
+  }
+  function formatRemaining(m){ const h=Math.floor(m/60), mm=Math.round(m%60); return h>0?`${h}h ${mm}m`:`${mm}m`; }
 
-    function clearStartTime() {
-      document.getElementById('startTime').value = '';
-    }
+  let chart;
+  function updateCalculator(){
+    const cp=parseFloat(numInput.value); if(isNaN(cp)||cp<0||cp>100) return;
+    localStorage.setItem('lastCharge',cp);
+    localStorage.setItem('overrideTime',document.getElementById('overrideTime').value);
+    const now=getNow(); const tCurr=interpolateTime(cp);
+    // Graph only defined points >= current
+    const graphPts=Object.keys(profile).map(Number).filter(p=>p>=cp).sort((a,b)=>a-b)
+      .map(pct=>{ const t=interpolateTime(pct), rem=t-tCurr; return { time:new Date(now.getTime()+rem*60000), percent:pct }; });
+    // Table 5% increments
+    const tablePts=[]; for(let pct=Math.ceil(cp/5)*5; pct<=100; pct+=5){ const t=interpolateTime(pct), rem=t-tCurr; tablePts.push({time:new Date(now.getTime()+rem*60000), percent:pct, rem}); }
+    // Chart
+    const labels=graphPts.map(p=>p.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
+    const data=graphPts.map(p=>p.percent);
+    const ctx=document.getElementById('chargeChart').getContext('2d'); if(chart)chart.destroy();
+    chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,fill:false,borderWidth:2,tension:0.4,pointBackgroundColor:labels.map((_,i)=>i===0?'var(--highlight)':'var(--primary)')}]},"options":{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
+    // Table
+    const tbody=document.querySelector('#dataTable tbody');tbody.innerHTML='';
+    tablePts.forEach(p=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${p.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</td><td>${p.percent}%</td><td>${formatRemaining(p.rem)}</td>`;tbody.appendChild(tr);});
+  }
 
-    const range = document.getElementById('batteryLevelRange');
-    const input = document.getElementById('batteryLevel');
-    range.oninput = () => input.value = range.value;
-    input.oninput = () => range.value = input.value;
-
-    function interpolateProfile() {
-      const defined = Object.keys(profile).map(k => [parseInt(k), profile[k]]).sort((a, b) => a[0] - b[0]);
-      const times = {};
-      for (let i = 0; i <= 100; i += 5) {
-        let prev = defined[0], next = defined[defined.length - 1];
-        for (let j = 0; j < defined.length - 1; j++) {
-          if (i >= defined[j][0] && i <= defined[j + 1][0]) {
-            prev = defined[j];
-            next = defined[j + 1];
-            break;
-          }
-        }
-        if (i < prev[0]) times[i] = prev[1];
-        else if (i > next[0]) times[i] = next[1];
-        else {
-          const t = (i - prev[0]) / (next[0] - prev[0]);
-          times[i] = Math.round(prev[1] + t * (next[1] - prev[1]));
-        }
-      }
-      return times;
-    }
-
-    function updateTable() {
-      const startTimeInput = document.getElementById('startTime').value;
-      const now = new Date();
-      let start = startTimeInput ? new Date(now.toDateString() + ' ' + startTimeInput) : now;
-      const level = parseInt(input.value);
-      const times = interpolateProfile();
-      const tbody = document.getElementById('chargeTable');
-      tbody.innerHTML = '';
-      let entries = [], labels = [], values = [];
-
-      for (let i = level; i <= 100; i += 5) {
-        const minutes = times[i] - times[level];
-        const d = new Date(start.getTime() + minutes * 60000);
-        const tstr = d.toTimeString().substring(0,5);
-        const m = minutes % 60;
-        const h = Math.floor(minutes / 60);
-        tbody.innerHTML += `<tr><td>${tstr}</td><td>${i}%</td><td>${h ? h + 'h ' : ''}${m}m</td></tr>`;
-      }
-
-      Object.entries(profile).sort((a,b)=>a[0]-b[0]).forEach(([k,v]) => {
-        if (parseInt(k) >= level) {
-          labels.push(k + '%');
-          values.push(v);
-        }
-      });
-      drawChart(labels, values);
-    }
-
-    let chart;
-    function drawChart(labels, data) {
-      const ctx = document.getElementById('chargeChart').getContext('2d');
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Minutes to Charge',
-            data,
-            fill: false,
-            borderColor: 'blue',
-            tension: 0.4
-          }]
-        },
-        options: {
-          scales: {
-            y: { title: { display: true, text: 'Minutes' } },
-            x: { title: { display: true, text: 'Charge Level' } }
-          }
-        }
-      });
-    }
-
-    createProfileInputs();
-    updateTable();
-  </script></body>
+  window.addEventListener('DOMContentLoaded',()=>{
+    numInput.value=localStorage.getItem('lastCharge')||0; slider.value=numInput.value;
+    document.getElementById('overrideTime').value=localStorage.getItem('overrideTime')||'';
+    displayCurrentTime(); setInterval(displayCurrentTime,1000);
+    document.getElementById('overrideTime').addEventListener('change',updateCalculator);
+    updateCalculator();
+  });
+</script></body>
 </html>
