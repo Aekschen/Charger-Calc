@@ -1,126 +1,201 @@
 <!DOCTYPE html><html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Charging Time Calculator v1.2</title>
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#007bff">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <title>Charging Time Calculator v1.3</title>
   <style>
-    :root { --bg:#fff;--fg:#000;--table-bg:#f4f4f4;--table-border:#ccc;--primary:#007bff;--highlight:#ff4d4f;--toggle-dark:#000;--toggle-light:#fff }
-    [data-theme="dark"]{--bg:#121212;--fg:#e0e0e0;--table-bg:#1e1e1e;--table-border:#333;--primary:#40a9ff;--highlight:#ff7875}
-    body{background:var(--bg);color:var(--fg);font-family:sans-serif;padding:1rem;max-width:600px;margin:auto;transition:0.3s}
-    h2{margin-bottom:0.2em}
-    #version{font-size:0.9em;color:gray;margin-bottom:1em}
-    label{font-weight:bold;margin-top:1rem;display:block}
-    .control{width:100%;box-sizing:border-box;margin:0.5rem 0;padding:0.5rem;font-size:1rem;color:var(--fg);background:var(--bg);border:1px solid var(--table-border);border-radius:4px}
-    button.control{cursor:pointer;border:none}
-    #toggleTheme{background:var(--toggle-dark);color:var(--toggle-light)}
-    #settingsToggle{background:var(--primary);color:#fff}
-    #settings{display:none;margin-top:1rem;padding:1rem;border:1px solid var(--table-border);border-radius:4px}
-    #chartContainer{margin-top:2rem}
-    table{width:100%;border-collapse:collapse;margin-top:1rem;background:var(--table-bg)}
-    th,td{border:1px solid var(--table-border);padding:0.5rem;text-align:center}
-    th{background:var(--table-bg)}
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body>
-  <h2>Charging Time Calculator</h2>
-  <div id="version">Version: 1.2</div><button id="toggleTheme" class="control">Toggle Theme</button> <button id="settingsToggle" class="control">Charging Profile Settings</button>
-
-  <div id="settings">
-    <p>Define charging profile: minutes to reach each 10% step.</p>
-    <div id="profileInputs"></div>
-    <button id="saveProfile" class="control">Save Profile</button>
-  </div>  <div id="currentTime"></div>
-  <label for="overrideTime">Current Time (HH:MM)</label>
-  <input type="time" id="overrideTime" class="control" /><label for="currentCharge">Battery Level (%)</label> <input type="number" id="currentCharge" min="0" max="100" class="control" /> <button onclick="updateCalculator()" class="control">Update</button>
-
-  <div id="chartContainer"><canvas id="chargeChart" height="200"></canvas></div>
-  <table id="dataTable"><thead><tr><th>Time</th><th>Charge %</th><th>Time Remaining</th></tr></thead><tbody></tbody></table><script>
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(console.error);
-  // Load or init profile (minutes)
-  let profile = JSON.parse(localStorage.getItem('chargeProfile')) || {0:0,100:414};
-
-  function renderProfileInputs() {
-    const c = document.getElementById('profileInputs'); c.innerHTML='';
-    for(let pct=10;pct<=100;pct+=10){
-      const d=document.createElement('div');
-      const l=document.createElement('label'); l.textContent=`Minutes to reach ${pct}%:`;
-      const i=document.createElement('input'); i.type='number'; i.min=0; i.className='control'; i.id=`prof${pct}`;
-      i.value = profile[pct]!==undefined?profile[pct]:'';
-      d.append(l,i); c.append(d);
+    body {
+      font-family: sans-serif;
+      margin: 1rem;
+      background-color: var(--bg);
+      color: var(--text);
     }
-  }
-  renderProfileInputs();
-  document.getElementById('settingsToggle').onclick=()=>{
-    const s=document.getElementById('settings'); s.style.display=s.style.display==='block'?'none':'block';
-  };
-  document.getElementById('saveProfile').onclick=()=>{
-    const newP={0:0};
-    for(let pct=10;pct<=100;pct+=10){const v=parseFloat(document.getElementById(`prof${pct}`).value); if(!isNaN(v))newP[pct]=v;}
-    if(!newP[100]){alert('Set time for 100%');return;}
-    profile=newP; localStorage.setItem('chargeProfile',JSON.stringify(profile));
-    alert('Profile saved'); document.getElementById('settings').style.display='none'; updateCalculator();
-  };
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    td, th {
+      border: 1px solid #ccc;
+      padding: 0.5rem;
+      text-align: center;
+    }
+    input, button {
+      padding: 0.5rem;
+      font-size: 1rem;
+    }
+    label {
+      display: block;
+      margin-top: 0.5rem;
+    }
+    .dark {
+      --bg: #121212;
+      --text: #fff;
+    }
+    .light {
+      --bg: #fff;
+      --text: #000;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .row > * {
+      flex: 1;
+      min-width: 120px;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body class="light">
+  <h1>Charging Time Calculator <small>v1.3</small></h1>  <div class="row">
+    <label for="start-time">Set Start Time</label>
+    <input id="start-time" type="time" />
+    <button onclick="clearTime()">Use Current Time</button>
+  </div>  <div class="row">
+    <label for="battery">Battery %</label>
+    <input type="range" id="battery" min="0" max="100" step="1" />
+    <input id="batteryInput" type="number" min="0" max="100" step="1" />
+  </div>  <div class="row">
+    <button style="background: dodgerblue; color: white" onclick="updateTable()">Update</button>
+    <button onclick="toggleSettings()">Charging Profile</button>
+    <button style="background:black; color:white" onclick="setTheme('dark')">Dark</button>
+    <button style="background:white; color:black" onclick="setTheme('light')">Light</button>
+  </div>  <div id="settings" class="hidden">
+    <h2>Charging Profile (minutes per step)</h2>
+    <label>50% <input type="number" id="p50" /></label>
+    <label>100% <input type="number" id="p100" /></label>
+  </div><canvas id="chart" style="max-width: 100%; margin-top: 2rem;"></canvas>
 
-  const toggle=document.getElementById('toggleTheme');
-  function applyTheme(t){document.documentElement.setAttribute('data-theme',t);
-    localStorage.setItem('theme',t);
-    toggle.textContent=t==='dark'?'Light Mode':'Dark Mode';
-    toggle.style.background=t==='dark'?'var(--toggle-light)':'var(--toggle-dark)';
-    toggle.style.color=t==='dark'?'var(--toggle-dark)':'var(--toggle-light)';
-  }
-  toggle.onclick=()=>applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
-  applyTheme(localStorage.getItem('theme')||'light');
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Charge %</th>
+        <th>Time Remaining</th>
+      </tr>
+    </thead>
+    <tbody id="table-body"></tbody>
+  </table>  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>  <script>
+    let profile = {};
+    const tableBody = document.getElementById("table-body");
+    const batterySlider = document.getElementById("battery");
+    const batteryInput = document.getElementById("batteryInput");
 
-  function getNow(){const ov=document.getElementById('overrideTime').value;const n=new Date();if(ov){const [h,m]=ov.split(':').map(Number);n.setHours(h,m,0,0);}return n;}
-  function displayCurrentTime(){const n=getNow();document.getElementById('currentTime').innerText=`Current time: ${n.toLocaleTimeString()}`;}
+    batterySlider.addEventListener("input", e => batteryInput.value = e.target.value);
+    batteryInput.addEventListener("input", e => batterySlider.value = e.target.value);
 
-  function interpolateTime(p){
-    const keys=Object.keys(profile).map(Number).sort((a,b)=>a-b);
-    let lower=keys[0], upper=keys[keys.length-1];
-    for(let k of keys){ if(k<=p) lower=k; if(k>=p){upper=k;break;}};
-    const t1=profile[lower],t2=profile[upper]; if(lower===upper) return t1;
-    const frac=(p-lower)/(upper-lower);
-    return t1+frac*(t2-t1);
-  }
+    function clearTime() {
+      document.getElementById("start-time").value = "";
+    }
 
-  function formatRemaining(mins){const h=Math.floor(mins/60),m=Math.round(mins%60);return h>0?`${h}h ${m}m`:`${m}m`;}
+    function toggleSettings() {
+      document.getElementById("settings").classList.toggle("hidden");
+    }
 
-  let chart;
-  function updateCalculator(){
-    const cp=parseFloat(document.getElementById('currentCharge').value);
-    if(isNaN(cp)||cp<0||cp>100) return;
-    localStorage.setItem('lastCharge',cp);
-    localStorage.setItem('overrideTime',document.getElementById('overrideTime').value);
-    const now=getNow();
-    // Use only defined profile points
-    const defined = Object.keys(profile).map(Number).sort((a,b)=>a-b).filter(p => p>=cp);
-    const pts = defined.map(pct => {
-      const t = interpolateTime(pct);
-      const rem = t - interpolateTime(cp);
-      const time = new Date(now.getTime()+rem*60000);
-      return { time, percent: pct, rem };
-    });
+    function setTheme(t) {
+      document.body.className = t;
+    }
 
-    // Chart
-    const labels=pts.map(p=>p.time.toLocaleTimeString());
-    const data=pts.map(p=>p.percent);
-    const ctx=document.getElementById('chargeChart').getContext('2d'); if(chart)chart.destroy();
-    chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,fill:false,borderWidth:2, tension:0.4, pointBackgroundColor:labels.map((_,i)=>i===0?'var(--highlight)':'var(--primary)')}],},options:{scales:{y:{beginAtZero:true,max:100}},plugins:{legend:{display:false}}}});
+    function getStartTime() {
+      const t = document.getElementById("start-time").value;
+      if (!t) return new Date();
+      const now = new Date();
+      const [h, m] = t.split(":").map(Number);
+      now.setHours(h, m, 0, 0);
+      return now;
+    }
 
-    // Table
-    const tbody=document.querySelector('#dataTable tbody');tbody.innerHTML='';
-    pts.forEach(p=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${p.time.toLocaleTimeString()}</td><td>${p.percent}%</td><td>${formatRemaining(p.rem)}</td>`;tbody.appendChild(tr);});
-  }
+    function getProfile() {
+      const p = {};
+      const keys = [50, 100];
+      for (const k of keys) {
+        const val = parseFloat(document.getElementById("p" + k).value);
+        if (!isNaN(val)) p[k] = val * 60; // convert to minutes
+      }
+      return p;
+    }
 
-  window.addEventListener('DOMContentLoaded',()=>{
-    document.getElementById('currentCharge').value=localStorage.getItem('lastCharge')||0;
-    document.getElementById('overrideTime').value=localStorage.getItem('overrideTime')||new Date().toTimeString().slice(0,5);
-    displayCurrentTime();setInterval(displayCurrentTime,1000);
-    document.getElementById('overrideTime').addEventListener('change',updateCalculator);
-    updateCalculator();
-  });
-</script></body>
+    function interpolateProfile(profile) {
+      const result = {};
+      const steps = Object.keys(profile).map(Number).sort((a,b) => a - b);
+      for (let i = 0; i < steps.length - 1; i++) {
+        const a = steps[i], b = steps[i+1];
+        const va = profile[a], vb = profile[b];
+        for (let p = a; p <= b; p += 5) {
+          const t = (p - a) / (b - a);
+          result[p] = va + t * (vb - va);
+        }
+      }
+      return result;
+    }
+
+    function updateTable() {
+      profile = getProfile();
+      const interpolated = interpolateProfile(profile);
+      const start = getStartTime();
+      const battery = parseInt(batteryInput.value);
+      let current = new Date(start);
+      let rows = "";
+      const labels = [], values = [];
+      const steps = Object.keys(interpolated).map(Number).filter(p => p >= battery);
+
+      for (let i = 0; i < steps.length; i++) {
+        const p = steps[i];
+        const minutes = interpolated[p] - (interpolated[battery] || 0);
+        const t = new Date(current.getTime() + minutes * 60000);
+        rows += `<tr><td>${t.toTimeString().slice(0,5)}</td><td>${p}%</td><td>${formatMins(minutes)}</td></tr>`;
+      }
+
+      tableBody.innerHTML = rows;
+
+      // update chart only with profile-defined points
+      const userSteps = Object.keys(profile).map(Number).sort((a,b)=>a-b);
+      for (const p of userSteps) {
+        labels.push(p + "%");
+        values.push(profile[p] / 60); // convert back to hours
+      }
+
+      drawChart(labels, values);
+    }
+
+    function drawChart(labels, data) {
+      if (window.myChart) window.myChart.destroy();
+      const ctx = document.getElementById("chart").getContext("2d");
+      window.myChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "Charge Time (hours)",
+            data,
+            fill: false,
+            borderColor: "blue",
+            tension: 0.4
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              title: { display: true, text: "Hours" }
+            }
+          }
+        }
+      });
+    }
+
+    function formatMins(m) {
+      const h = Math.floor(m / 60);
+      const min = Math.round(m % 60);
+      return h > 0 ? `${h}h ${min}m` : `${min}m`;
+    }
+  </script></body>
 </html>
